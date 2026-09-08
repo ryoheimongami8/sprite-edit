@@ -1,0 +1,6 @@
+# Requires Python 3.10+.
+# ffmpeg on PATH is used if present; otherwise imageio-ffmpeg supplies one.
+gradio>=4.44
+pillow>=10.0
+numpy>=1.24
+imageio-ffmpeg>=0.4.9
