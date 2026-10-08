@@ -52,7 +52,7 @@ python -m venv .venv
 
 ```powershell
 # Windows
-.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate
 ```
 
 ```bash
