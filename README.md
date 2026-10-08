@@ -1,5 +1,5 @@
 [README.md](https://github.com/user-attachments/files/31991023/README.md)
-# Sprite Edit
+# Sprite Edit　（現在、CLI経由では動画を参照データとして渡せないので、動画生成は手動でお願いします）
 
 透過スプライトシートを動画へ変換し、生成AIで衣装・デザインを変更したあと、元の配置を保ったスプライトシートへ再構成するローカルツールです。Gradioの画面から操作できます。
 
