@@ -82,6 +82,9 @@ pip install -r requirements.txt
 python app.py --open
 ```
 
+もしくは、setup_and_run.bat　をダブルクリックしてください。
+
+
 ブラウザが自動で開かない場合は、[http://127.0.0.1:7860](http://127.0.0.1:7860)へアクセスしてください。
 
 機能4・5を使用する場合は、事前にesora API CLIでログインします。CLIがPATHにない場合は、環境変数`ESORA_CLI_PATH`へ実行ファイルのフルパスを設定してください。
