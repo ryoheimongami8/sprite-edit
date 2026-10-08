@@ -3,22 +3,27 @@
 
 透過スプライトシートを動画へ変換し、生成AIで衣装・デザインを変更したあと、元の配置を保ったスプライトシートへ再構成するローカルツールです。Gradioの画面から操作できます。
 
+***
 
 透過スプライトシートと、変更デザイン参照画像を準備して画像のようにアップロードしてステップ1を実行
 <img width="1649" height="1519" alt="image" src="https://github.com/user-attachments/assets/b3bde22e-972a-4183-b333-911010228821" />
 
+***
 
 これで1枚の画像変更を行います。（これが動画生成の最初のフレーム）
 <img width="1623" height="216" alt="image" src="https://github.com/user-attachments/assets/a910e149-3538-49ba-816d-767a42b8b22a" />
 
+***
 
 できたこの二つをファイルをダウンロードして、Esoraで動画生成を行います。
 <img width="1928" height="827" alt="image" src="https://github.com/user-attachments/assets/8c75cdda-9afc-447b-a011-aeef588f4c61" />
 
+***
 
 できた動画を、ステップ2にアップロードして実行を押すと、スプライトシートを自動作成します
 <img width="1636" height="1602" alt="image" src="https://github.com/user-attachments/assets/8098f1a5-3b0e-4786-b01a-70adccdf302e" />
 
+***
 
 ## 処理フロー
 
