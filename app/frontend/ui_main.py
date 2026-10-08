@@ -17,6 +17,7 @@ import gradio as gr
 from backend import config, video
 
 from . import (
+    common,
     tab_extract,
     tab_generate_image,
     tab_generate_video,
@@ -67,6 +68,9 @@ def build() -> gr.Blocks:
                 min_width=280,
             )
 
+        # 起動時に esora へ接続できているかを確かめ、だめなら先に知らせる。
+        connection_banner = gr.Markdown(visible=False)
+
         # タブ間で持ち回る「いま作業中のセッション」。
         #
         # gr.Tabs() の中で作らないこと。Tabs は直下の子をタブのペインとして
@@ -94,5 +98,25 @@ def build() -> gr.Blocks:
 
         with gr.Accordion("環境", open=False):
             gr.Markdown(_environment_note())
+
+        def check_connection():
+            ok, message = common.connection_status()
+            if ok:
+                return gr.update(value="", visible=False)
+            gr.Warning(
+                "esora に接続できていません。機能4・5（画像/動画生成）は使えません。"
+            )
+            return gr.update(
+                visible=True,
+                value=(
+                    "### ⚠️ esora に接続できていません\n"
+                    "機能4・5（画像/動画生成）は使えません。"
+                    "ターミナルで `esora-api auth login` を実行してから"
+                    "ページを再読み込みしてください。\n\n"
+                    f"```\n{message}\n```"
+                ),
+            )
+
+        demo.load(check_connection, outputs=connection_banner)
 
     return demo

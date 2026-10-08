@@ -22,11 +22,24 @@
 
 from __future__ import annotations
 
+import threading
+import traceback
+
 import gradio as gr
 
 from backend import config, esora_cli, feature3, io_paths, keying, pipeline, upscale
 
 from . import common
+
+
+_DEFAULT_BACKGROUND_LABEL = next(
+    (
+        label
+        for label, color in config.BACKGROUND_PRESETS.items()
+        if color == config.DEFAULT_BACKGROUND
+    ),
+    next(iter(config.BACKGROUND_PRESETS)),
+)
 
 
 def _upload_path(uploaded) -> str:
@@ -63,23 +76,24 @@ def build(session_state: gr.State) -> dict:
                 "#### ステップ1　素材を入れて実行（機能1 → 機能2 → 機能4）"
             )
             with gr.Row():
-                sheet_upload = gr.File(
+                sheet_upload = gr.Image(
                     label="① スプライトシート (PNG / 透過つき)",
-                    file_types=[".png", ".webp", ".gif", ".tif", ".tiff"],
-                    file_count="single",
                     type="filepath",
+                    image_mode="RGBA",
+                    sources=["upload"],
+                    height=320,
                 )
-                design_upload = gr.File(
+                design_upload = gr.Image(
                     label="② 変更案の画像（衣装デザインの参照）",
-                    file_types=["image"],
-                    file_count="single",
                     type="filepath",
+                    sources=["upload"],
+                    height=320,
                 )
             with gr.Row():
                 background = gr.Dropdown(
                     label="背景色（透過を潰す色）",
                     choices=list(config.BACKGROUND_PRESETS),
-                    value=next(iter(config.BACKGROUND_PRESETS)),
+                    value=_DEFAULT_BACKGROUND_LABEL,
                     scale=2,
                 )
                 cols = gr.Number(
@@ -128,7 +142,9 @@ def build(session_state: gr.State) -> dict:
                 )
                 check = gr.Button("esora 接続確認", scale=1)
 
-            prepare_report = gr.Textbox(label="結果", lines=10, max_lines=24)
+            prepare_report = gr.Textbox(
+                label="結果（リアルタイム）", lines=10, max_lines=24, autoscroll=True
+            )
             with gr.Row():
                 first_frame_view = gr.Image(
                     label="First Frame（元）", height=280, type="filepath"
@@ -166,11 +182,10 @@ def build(session_state: gr.State) -> dict:
                     scale=5,
                 )
                 refresh = gr.Button("↻", scale=1, min_width=48)
-            video_upload = gr.File(
+            video_upload = gr.Video(
                 label="④ 変更後の動画 (mp4 / mov / webm)",
-                file_types=[".mp4", ".mov", ".webm", ".mkv"],
-                file_count="single",
-                type="filepath",
+                sources=["upload"],
+                height=320,
             )
 
             with gr.Accordion("詳細設定（通常は変更不要）", open=False):
@@ -253,37 +268,64 @@ def build(session_state: gr.State) -> dict:
         model_value, aspect_value, size_value, seed_value, prompt_value,
         progress=gr.Progress(),
     ):
-        blank = (None, None, None, [], gr.update(), None)
-        try:
-            sheet_path = _upload_path(sheet_value)
-            design_path = _upload_path(design_value)
-            if not sheet_path or not design_path:
-                return ("① スプライトシートと ② 変更案の画像を選んでください。", *blank)
-            result = pipeline.run(
-                sheet_path,
-                design_path,
-                background=config.BACKGROUND_PRESETS.get(
-                    str(background_value), config.DEFAULT_BACKGROUND
-                ),
-                cols=common.as_int(cols_value, 0),
-                rows=common.as_int(rows_value, 0),
-                fps=max(1, common.as_int(fps_value, config.DEFAULT_FPS)),
-                duration_s=common.as_float(
-                    duration_value, config.DEFAULT_DURATION_S
-                ),
-                target=max(1, common.as_int(target_value, config.DEFAULT_TARGET_SIZE)),
-                prompt=str(prompt_value),
-                model=str(model_value or ""),
-                aspect_ratio=str(aspect_value),
-                image_size=str(size_value),
-                seed=common.as_int(seed_value, 0) or None,
-                progress=common.bridge(progress),
-            )
-        except (esora_cli.EsoraCliError, ValueError) as exc:
-            return (f"[失敗] {exc}", *blank)
-        except Exception as exc:  # noqa: BLE001
-            return (common.failure(exc), *blank)
+        keep = gr.update()
+        blank = (None, None, None, [], keep, None)
+        sheet_path = _upload_path(sheet_value)
+        design_path = _upload_path(design_value)
+        if not sheet_path or not design_path:
+            yield ("① スプライトシートと ② 変更案の画像を選んでください。", *blank)
+            return
 
+        log = common.ProgressLog(progress)
+        log(0.0, "開始")
+        outcome: dict = {}
+
+        def work() -> None:
+            try:
+                outcome["result"] = pipeline.run(
+                    sheet_path,
+                    design_path,
+                    background=config.BACKGROUND_PRESETS.get(
+                        str(background_value), config.DEFAULT_BACKGROUND
+                    ),
+                    cols=common.as_int(cols_value, 0),
+                    rows=common.as_int(rows_value, 0),
+                    fps=max(1, common.as_int(fps_value, config.DEFAULT_FPS)),
+                    duration_s=common.as_float(
+                        duration_value, config.DEFAULT_DURATION_S
+                    ),
+                    target=max(
+                        1, common.as_int(target_value, config.DEFAULT_TARGET_SIZE)
+                    ),
+                    prompt=str(prompt_value),
+                    model=str(model_value or ""),
+                    aspect_ratio=str(aspect_value),
+                    image_size=str(size_value),
+                    seed=common.as_int(seed_value, 0) or None,
+                    progress=log,
+                )
+            except BaseException as exc:  # noqa: BLE001
+                outcome["error"] = exc
+                outcome["trace"] = traceback.format_exc()
+
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        while thread.is_alive():
+            yield (log.render(running=True), *blank)
+            thread.join(timeout=0.5)
+
+        error = outcome.get("error")
+        if error is not None:
+            head = f"[失敗] {error}"
+            if not isinstance(error, (esora_cli.EsoraCliError, ValueError)):
+                head += "\n\n" + outcome.get("trace", "")
+            yield (
+                f"{log.render(running=False)}\n\n{head}\n\n{log.breakdown()}",
+                *blank,
+            )
+            return
+
+        result = outcome["result"]
         # 手作業の動画生成に要るのは、拡大後の動画と変更後の First Frame。
         handoff = [
             found
@@ -293,8 +335,9 @@ def build(session_state: gr.State) -> dict:
             )
             if found
         ]
-        return (
-            result.report,
+        yield (
+            f"{log.render(running=False)}\n\n{log.breakdown()}\n\n"
+            f"════ 結果 ════\n{result.report}",
             common.existing(result.first_frame),
             common.existing(result.generated_image),
             common.existing(result.video_path),

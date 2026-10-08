@@ -135,9 +135,14 @@ def run(
     generated: Path | None = None
     failure = ""
     try:
-        resolved = model.strip() or esora_cli.resolve_model_id(
-            "image", config.ESORA_IMAGE_MODEL_HINTS
-        )
+        if model.strip():
+            resolved = model.strip()
+        else:
+            progress(0.64, "機能4: 画像生成モデルを探す（esora-api model list）")
+            resolved = esora_cli.resolve_model_id(
+                "image", config.ESORA_IMAGE_MODEL_HINTS
+            )
+        progress(0.66, f"機能4: 画像生成を依頼（モデル {resolved}、サーバー待ち）")
         result4 = feature4.run(
             session,
             result2.first_frame,

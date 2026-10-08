@@ -58,13 +58,13 @@ DEFAULT_LOOP = False
 #: 背景プリセット。素材（茶色の馬・灰白の鎧・青の新装備）と衝突しない色を
 #: 先頭に置く。UI からは任意の #RRGGBB も渡せる。
 BACKGROUND_PRESETS: dict[str, str] = {
+    "グレー #808080": "#808080",
     "マゼンタ #FF00FF": "#FF00FF",
     "グリーン #00FF00": "#00FF00",
-    "グレー #808080": "#808080",
     "ブラック #000000": "#000000",
     "ホワイト #FFFFFF": "#FFFFFF",
 }
-DEFAULT_BACKGROUND = "#FF00FF"
+DEFAULT_BACKGROUND = "#808080"
 
 
 # ─── 機能2: アップスケール ───

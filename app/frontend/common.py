@@ -7,6 +7,8 @@ UI 側にロジックを置かないための緩衝材だけを入れる。判�
 
 from __future__ import annotations
 
+import threading
+import time
 import traceback
 from pathlib import Path
 from typing import Callable
@@ -41,6 +43,65 @@ def bridge(progress: gr.Progress) -> Callable[[float, str], None]:
     return report
 
 
+class ProgressLog:
+    """進捗メッセージを経過時間つきで溜める。画面のリアルタイム表示と、
+    どの区間が遅かったかの内訳（ボトルネック特定）の両方に使う。
+
+    backend の ``(fraction, message)`` をそのまま差し込める。別スレッドから
+    書いて UI スレッドから読むので、ロックで守る。
+    """
+
+    def __init__(self, gradio_progress: gr.Progress | None = None) -> None:
+        self._start = time.perf_counter()
+        self._events: list[tuple[float, float, str]] = []
+        self._lock = threading.Lock()
+        self._gradio = gradio_progress
+
+    def __call__(self, fraction: float, message: str) -> None:
+        now = time.perf_counter() - self._start
+        with self._lock:
+            self._events.append((now, fraction, message))
+        if self._gradio is not None:
+            try:
+                self._gradio(fraction, desc=message)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def elapsed(self) -> float:
+        return time.perf_counter() - self._start
+
+    def render(self, *, running: bool) -> str:
+        with self._lock:
+            events = list(self._events)
+        lines = [
+            f"[{t:6.1f}s] {fraction * 100:3.0f}%  {message}"
+            for t, fraction, message in events
+        ]
+        if running:
+            lines.append(f"[{self.elapsed():6.1f}s] ...実行中")
+        return "\n".join(lines)
+
+    def breakdown(self, top: int = 6) -> str:
+        """各メッセージから次のメッセージまでの所要時間が長い順。
+
+        メッセージは「その作業を始めた」時点で出すので、区間の長さがそのまま
+        直前メッセージの作業時間になる。
+        """
+        with self._lock:
+            events = list(self._events)
+        end = self.elapsed()
+        spans = []
+        for index, (t, _fraction, message) in enumerate(events):
+            until = events[index + 1][0] if index + 1 < len(events) else end
+            spans.append((until - t, message))
+        spans.sort(key=lambda item: item[0], reverse=True)
+        total = max(end, 1e-9)
+        lines = [f"── 所要時間の内訳（合計 {end:.1f}s、長い順）──"]
+        for seconds, message in spans[:top]:
+            lines.append(f"{seconds:7.1f}s ({seconds / total * 100:3.0f}%)  {message}")
+        return "\n".join(lines)
+
+
 def failure(exc: Exception) -> str:
     """例外を、UI にそのまま出せる 1 ブロックにする。
 
@@ -65,6 +126,22 @@ def existing(path: Path | None) -> str | None:
 
 
 # ─── 機能4・5 共通: esora API 接続まわり ───
+
+
+def connection_status() -> tuple[bool, str]:
+    """(接続できているか, 表示用メッセージ)。起動時の通知と接続確認ボタンで共有。"""
+    try:
+        who = esora_cli.whoami()
+    except esora_cli.EsoraCliError as exc:
+        return False, f"[未接続] {exc}"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"[未接続] {exc}"
+    return True, "\n".join(
+        [
+            f"サインイン中: {who.get('email', '?')}",
+            f"profile: {who.get('profile', '?')} / base_url: {who.get('base_url', '?')}",
+        ]
+    )
 
 
 def connection_report() -> str:

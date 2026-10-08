@@ -115,7 +115,11 @@ def build(session_state: gr.State) -> dict:
                     preset = gr.Dropdown(
                         label="背景プリセット",
                         choices=list(config.BACKGROUND_PRESETS),
-                        value=next(iter(config.BACKGROUND_PRESETS)),
+                        value=next(
+                            label
+                            for label, color in config.BACKGROUND_PRESETS.items()
+                            if color == config.DEFAULT_BACKGROUND
+                        ),
                     )
                     background = gr.ColorPicker(
                         label="背景色（透過を潰す色）",
